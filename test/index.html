@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+  <head>
+  	<title>Yocto Tests</title>
+		<link href="http://code.jquery.com/qunit/qunit-git.css" media="screen" rel="stylesheet" type="text/css" />
+		<script type="text/javascript" src="http://code.jquery.com/qunit/qunit-git.js"></script>
+		
+		<script type="text/javascript" src="../dist/yocto.min.js"></script>
+		<script type="text/javascript" src="test.core.js"></script>
+	</head>
+	<body>
+    <h1 id="qunit-header">QUnit example</h1>
+    <h2 id="qunit-banner"></h2>
+    <div id="qunit-testrunner-toolbar"></div>
+    <h2 id="qunit-userAgent"></h2>
+    <ol id="qunit-tests"></ol>
+    <div id="qunit-fixture">
+      <defn>defn</defn>
+      <div id="root" class="foo">
+        <div class="bar"></div>
+      </div>
+      <div id="double" class="bar">
+        <div class="foo"></div>
+        <div class="bar"></div>
+      </div>
+      <div id="tripple">
+        <div class="a"></div>
+        <div class="b"></div>
+        <div class="c"></div>
+      </div>
+      <div id="both" class="foo bar"></div>
+      <div id="nested-a"><div id="nested-b"><div id="nested-c"></div></div></div>
+      <form id="form">
+        <input name="text" type="text" value="text-value">
+        <fieldset>
+          <input name="checked-checkbox" type="checkbox" checked>
+          <input name="unchecked-checkbox" type="checkbox">
+        </fieldset>
+        <fieldset>
+          <input value="radio-a" name="radio" type="radio">
+          <input value="radio-b" name="radio" type="radio">
+          <input value="radio-c" name="radio" type="radio">
+        </fieldset>
+        <fieldset>
+          <input name="multi[]" type="text" value="value-a">
+          <input name="multi[]" type="text" value="value-b">
+          <input name="multi[3]" type="text" value="value-c">
+        </fieldset>
+        <fieldset>
+          <select name="select" id="select">
+            <option value="value-a">a</option>
+            <option value="value-b" selected>b</option>
+            <option value="value-c">c</option>
+          </select>
+          <select name="multiple-select" id="multiple-select" multiple>
+            <option value="value-a" selected>a</option>
+            <option value="value-b">b</option>
+            <option value="value-c" selected>c</option>
+          </select>
+        </fieldset>
+      </form>
+      <div id="floater" style="display: block; width: 50px; height: 50px; margin: 50px; position: fixed; padding: 20px; left: 50px; top: 100px"></div>
+    </div>
+	</body>
+</html>
