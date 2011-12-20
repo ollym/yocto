@@ -200,14 +200,14 @@ var fn = Yocto.prototype = Yocto.fn = {
   },
   
   /**
-   * @param {(Selector|function(number)|Element|Yocto)} arg1
+   * @param {(Selector|function(this:Element,number)|Element|Yocto)} selector
    * @return {jQuery}
    */
   filter: function(selector) {
-    return $(filter.call(this, function(element, index, obj) {
+    return $(filter.call(this, function(element, index) {
       return $(element).is(isFunc(selector) ? function() {
         return selector.call(element, index);
-      } : selector)
+      } : selector);
     }), null, this);
   },
   
@@ -216,7 +216,7 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @return {Yocto}
    */
   map: function(callback) {
-    return $(map.call(this, function(element, index, obj) {
+    return $(map.call(this, function(element, index) {
       return callback.call(element, index, element);
     }), null, this);
   },
@@ -308,8 +308,8 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @return {Yocto}
    */
   not: function(selector) {
-    return this.filter(function(index, element) {
-      return ! $(element).is(selector);
+    return this.filter(function(index) {
+      return ! $(this).is(selector);
     }, this);
   },
   
@@ -347,7 +347,7 @@ var fn = Yocto.prototype = Yocto.fn = {
    */
   find: function(selector) {
     var context = this;
-    return context.reduce(function(array, element, index, obj) {
+    return context.reduce(function(array, element) {
       return uniq(array.concat($.query(selector, element)));
     });
   },
@@ -454,38 +454,6 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @return {Yocto}
    */
   after: function(selector) {
-    $(selector).insert(this, 0); return this;
-  },
-  
-  /**
-   * @param {Selector|function(this:Element,number)} selector
-   * @return {Yocto}
-   */
-  prepend: function(selector) {
-    $(selector).insert(this, 1); return this;
-  },
-  
-  /**
-   * @param {Selector|function(this:Element,number)} selector
-   * @return {Yocto}
-   */
-  before: function(selector) {
-    $(selector).insert(this, 2); return this;
-  },
-  
-  /**
-   * @param {Selector|function(this:Element,number)} selector
-   * @return {Yocto}
-   */
-  append: function(selector) {
-    $(selector).insert(this, 3); return this;
-  },
-  
-  /**
-   * @param {Selector|function(this:Element,number)} selector
-   * @return {Yocto}
-   */
-  insertAfter: function(selector) {
     this.insert(isFunc(selector) ? selector : flatten.call(arguments), 0); return this;
   },
   
@@ -493,7 +461,7 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @param {Selector|function(this:Element,number)} selector
    * @return {Yocto}
    */
-  prependTo: function(selector) {
+  prepend: function(selector) {
     this.insert(isFunc(selector) ? selector : flatten.call(arguments), 1); return this;
   },
   
@@ -501,7 +469,7 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @param {Selector|function(this:Element,number)} selector
    * @return {Yocto}
    */
-  insertBefore: function(selector) {
+  before: function(selector) {
     this.insert(isFunc(selector) ? selector : flatten.call(arguments), 2); return this;
   },
   
@@ -509,8 +477,40 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @param {Selector|function(this:Element,number)} selector
    * @return {Yocto}
    */
-  appendTo: function(selector) {
+  append: function(selector) {
     this.insert(isFunc(selector) ? selector : flatten.call(arguments), 3); return this;
+  },
+  
+  /**
+   * @param {Selector|function(this:Element,number)} selector
+   * @return {Yocto}
+   */
+  insertAfter: function(selector) {
+    $(selector).insert(this, 0); return this;
+  },
+  
+  /**
+   * @param {Selector|function(this:Element,number)} selector
+   * @return {Yocto}
+   */
+  prependTo: function(selector) {
+    $(selector).insert(this, 1); return this;
+  },
+  
+  /**
+   * @param {Selector|function(this:Element,number)} selector
+   * @return {Yocto}
+   */
+  insertBefore: function(selector) {
+    $(selector).insert(this, 2); return this;
+  },
+  
+  /**
+   * @param {Selector|function(this:Element,number)} selector
+   * @return {Yocto}
+   */
+  appendTo: function(selector) {
+    $(selector).insert(this, 3); return this;
   },
   
   /**
@@ -519,7 +519,7 @@ var fn = Yocto.prototype = Yocto.fn = {
    */
   replaceWith: function(context) {
     forEach.call(this, function(element) {
-      element.before(context).detach();
+      $(element).before(context).detach();
     }); return this;
   },
   
@@ -542,7 +542,7 @@ var fn = Yocto.prototype = Yocto.fn = {
   wrapAll: function(selector) {
     var highest, height, length;
     forEach.call(this, function(element) {
-      var length = $(element).parents().length;
+      length = $(element).parents().length;
       if ( ! height || length < height)
         highest = element, height = length;
     }); return $(highest).wrap(selector);
@@ -577,7 +577,10 @@ var fn = Yocto.prototype = Yocto.fn = {
         keys(property).forEach(function(key) {
           this.css(key, property[key]);
         }, this);
-    } else forEach.call(this, function(element, index, obj) {
+    } else forEach.call(this, function(element, index) {
+      value = isFunc(value) ? value.call(element, index, $(element).css(property)) : value;
+      if (isNum(value) && ! property.match(/column(s|count)|columns|font-weight|line-height|opacity|z-index|zoom/gi))
+        value += 'px';
       element.style[camelize(property)] = isFunc(value) ? value.call(element, index, $(element).css(property)) : value;
     });
     return this;
@@ -614,10 +617,9 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @return {(string|Yocto)}
    */
   html: function(string) {
-    if (1 in arguments) return forEach.call(this, function(element, index, obj) {
+    return arguments.length ? forEach.call(this, function(element, index) {
       $(element).empty().append(isFunc(string) ? string.call(element, index, element.innerHTML) : string);
-    }) || this;
-    else return this[0].innerHTML;
+    }) || this : this[0].innerHTML;
   },
   
   /**
@@ -625,10 +627,9 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @return {(string|Yocto)}
    */
   text: function(string) {
-    if (1 in arguments) return forEach.call(this, function(element, index, obj) {
+    return arguments.length ? forEach.call(this, function(element, index) {
       element.textContent = isFunc(string) ? string.call(element, index, element.innerHTML) : string;
-    }) || this;
-    else return this[0].textContent;
+    }) || this : this[0].textContent;
   },
   
   /**
@@ -642,7 +643,7 @@ var fn = Yocto.prototype = Yocto.fn = {
         this[0].getAttribute(name) || this[0][name] || '';
     else forEach.call(this, function(element, index, obj) {
       if (isObj(name)) keys(name).forEach(function(key) { obj.attr(key, name[key]); });
-      else element.setAttribute(name, isFunc(value) ? value.call(element, index, name) : value);
+      else element.setAttribute(name, isFunc(value) ? value.call(element, index, $(element).attr(name)) : value);
     }); return this;
   },
   
@@ -694,7 +695,7 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @return {number}
    */
   index: function(selector) {
-    if (1 in arguments) return this.parent().children().indexOf(this[0]);
+    if ( ! arguments.length) return this.parent().children().indexOf(this[0]);
     for (var i = 0; i < this.length; i++)
       if ($(this[i]).is(selector)) return i;
     return -1;
@@ -740,8 +741,8 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @return {Yocto}
    */
   toggleClass: function(name, add) {
-    forEach.call(this, function(element, index, obj) {
-      var classes = isFunc(name) ? name.call(element, index, element.className) : name, e = $(element);
+    forEach.call(this, function(element, index) {
+      var classes = isFunc(name) ? name.call(element, index, element.className, add) : name, e = $(element);
       classes.split(/\s+/).forEach(function(klass) {
         (isBool(add) ? add : ! e.hasClass(klass)) ? e.addClass(klass) : e.removeClass(klass);
       });
@@ -750,14 +751,14 @@ var fn = Yocto.prototype = Yocto.fn = {
   
   /** @return {number} */
   width: function(value) {
-    return (1 in arguments) ? this.css('width', value) : this.offset().width;
+    return arguments.length ? this.css('width', value) : this.offset().width;
   },
   
   /** @return {number} */
   height: function(value) {
-    return (1 in arguments) ? this.css('height', value) : this.offset().height;
+    return arguments.length ? this.css('height', value) : this.offset().height;
   }
 };
 
 /* Dynamic Definitions & Aliases */
-Yocto.prototype.every = Yocto.prototype.is;
+Yocto.prototype.some = Yocto.prototype.is;

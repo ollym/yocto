@@ -119,25 +119,17 @@ test('Yocto#slice', function() {
   ok(slice instanceof $);
   equal(slice.length, 2);
   equal(slice.prevObject, items);
-  ok(slice.every(function(e,i) {
-    return e === items[1 + i];
+  ok([].every.call(slice, function(element, i) {
+    return element == items[1 + i];
   }));
 });
 test('Yocto#filter', function() {
   var i = 0, items = $('.foo, .bar');
-  var result = items.filter(function(index, element, obj) {
-    
-    if (i === 0) {
-      equal(obj, items);
-    }
-    
-    equal(this, element);
-    equal(index, i);
-    equal(items[i++], element);
-    
+  var result = items.filter(function(index) {
+    equal(this, items[index]);
+    equal(index, i++);
     return !!(i % 2);
   });
-  
   ok(result instanceof $);
   equal(result.prevObject, items);
   equal(i, items.length);
@@ -145,12 +137,7 @@ test('Yocto#filter', function() {
 });
 test('Yocto#map', function() {
   var i = 0, items = $('.foo, .bar'), parents = [];
-  var result = items.map(function(index, element, obj) {
-    
-    if (i === 0) {
-      equal(obj, items);
-    }
-    
+  var result = items.map(function(index, element) {
     equal(this, element);
     equal(index, i);
     equal(items[i++], element);
@@ -181,17 +168,11 @@ test('Yocto#size', function() {
 });
 test('Yocto#each', function() {
   var i = 0, items = $('.foo, .bar'), parents = [];
-  var result = items.each(function(index, element, obj) {
-    
-    if (i === 0) {
-      equal(obj, items);
-    }
-    
-    equal(this, element);
+  var result = items.each(function(index) {
     equal(index, i);
-    equal(items[i++], element);
+    equal(items[i++], this);
     
-    parents.push(element.parentNode);
+    parents.push(this.parentNode);
   });
 
   equal(result, items);
@@ -202,7 +183,7 @@ test('Yocto#each', function() {
     i++; if (indx === 2) return false;
   });
   
-  items.each(function() { strictEqual(this, parents); return false; }, parents);
+  deepEqual(items.pluck('parentNode'), parents);
   equal(i, 3);
 });
 test('Yocto#is', function() {
@@ -210,18 +191,13 @@ test('Yocto#is', function() {
   ok(root.is());
   ok(root.is('#root'));
   ok(root.is('#root.foo'));
-  ok(root.is(function(element, index, obj) {
-    equal(obj, root);
-    equal(this, element);
+  ok(root.is(function(index) {
+    equal(this, root[index]);
     equal(index, 0);
     return true;
   }));
-  
-  root.is(function(element, index, obj) {
-    deepEqual(this, ['foo']);
-  }, ['foo']);
-  
-  strictEqual(root.is, root.every);
+    
+  strictEqual(root.is, root.some);
 });
 test('Yocto#detach', function() {
   var bar = $('.bar');
@@ -305,8 +281,9 @@ test('Yocto#show', function() {
 test('Yocto#insert', function() {
   $('#root').insert('<div><script>window.foo="bar";</script></div>');
   equal(window.foo, 'bar'); delete window.foo;
-  var nodes = $('.bar').insert(function(index, element) {
-    strictEqual(this, element);
+  var bar = $('.bar');
+  var nodes = bar.insert(function(index) {
+    strictEqual(this, bar[index]);
     return '<div class="insert-index">' + index + '</div>';
   });
   equal(nodes.length, $('.bar').length);
@@ -433,10 +410,9 @@ test('Yocto#next', function() {
 test('Yocto#html', function() {
   equal($('#root').html(), $('#root')[0].innerHTML);
   var foo = $('.foo');
-  foo.html(function(index, html, element, object) {
-    strictEqual(foo, object);
-    strictEqual(element, this);
-    equal(element.innerHTML, html);
+  foo.html(function(index, html) {
+    strictEqual(this, foo[index]);
+    equal(this.innerHTML, html);
     return '';
   });
   ok($('.foo').pluck('innerHTML').every(function(html) {
@@ -447,10 +423,9 @@ test('Yocto#text', function() {
   $('#root').text('HelloWorld');
   equal($('#root')[0].textContent, 'HelloWorld');
   var foo = $('.foo');
-  foo.text(function(index, text, element, object) {
-    strictEqual(foo, object);
-    strictEqual(element, this);
-    equal(element.textContent, text);
+  foo.text(function(index, text) {
+    strictEqual(this, foo[index]);
+    equal(this.textContent, text);
     return '<div></div>';
   });
   ok($('.foo').pluck('textContent').every(function(text) {
@@ -459,12 +434,14 @@ test('Yocto#text', function() {
 });
 test('Yocto#attr', function() {
   equal($('#root').attr('id'), 'root'), obj = $('.bar');
-  equal(obj.attr('class', function(index, name, element, self) {
-    equal(name, 'class');
-    strictEqual(this, element);
-    strictEqual(self, obj);
-    return 'bar';
+  equal(obj.attr('class', function(index, value) {
+    equal(value, this.className);
+    strictEqual(this, obj[index]);
+    return 'foo';
   }), obj);
+  ok([].every.call(obj, function(e) {
+      return e.className == 'foo';
+  }));
   $('#root').attr({
     'data-foo': 'bar',
     'data-bar': 'foo'
@@ -481,12 +458,9 @@ test('Yocto#val', function() {
   equal($('#form [name="checked-checkbox"]').val(), 'on');
   
   var radios = $('#form [name="radio"]');
-  radios.val(function(index, value, element, obj) {
-    
-    strictEqual(obj, radios);
-    strictEqual(this, element);
+  radios.val(function(index, value) {
+    strictEqual(this, radios[index]);
     strictEqual(value, 'radio-' + (['a','b','c'][index]));
-    
     return 'radio-v';
   });
   
@@ -498,7 +472,6 @@ test('Yocto#val', function() {
   
   $('#multiple-select').val(['value-c','value-b']);
   deepEqual($('#multiple-select').val(), ['value-b','value-c']);
-  
 });
 test('Yocto#offset', function() {
   deepEqual($('#floater').offset(), {
@@ -564,8 +537,13 @@ test('Yocto#width', function() {
   equal($('#floater').width(), 90);
   
   $('#floater').width(20);
-  equal($('#floater').width(), 20);
+  equal($('#floater').width(), 60);
 });
 test('Yocto#height', function() {
+  equal($(window).height(), window.innerHeight);
+  equal($(document).height(), document.documentElement.offsetHeight);
+  equal($('#floater').height(), 90);
   
+  $('#floater').height(20);
+  equal($('#floater').height(), 60);
 });
