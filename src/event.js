@@ -83,7 +83,16 @@ function eventTypeParameters(name, data) {
       'repeat': false,
       'locale': null
     }, data);
-    case 'FocusEvent': return merge({'deatil': 0}, data);
+    case 'FocusEvent': return merge({
+      'bubbles': true,
+      'cancelable': true,
+      'deatil': 0
+    }, data);
+    case 'CustomEvent': return merge({
+      'bubbles': true,
+      'cancelable': true,
+      'detail': null
+    }, data);
   }
 }
 

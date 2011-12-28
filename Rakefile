@@ -39,5 +39,5 @@ task :build do
   
   puts "Original: %0.3f kb" % (raw/1000);
   puts "Minified: %0.3f kb : %0.3f" % [(min/1000), (raw/min)];
-  puts "Gzipped:  %0.3f kb : %0.3f" % [(gzip/1000), (min/gzip)];
+  puts "Gzipped:  %0.3f  kb : %0.3f" % [(gzip/1000), (min/gzip)];
 end

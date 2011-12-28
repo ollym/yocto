@@ -19,7 +19,6 @@ $.ajaxSettings = {
     'html':   'text/html',
     'text':   'text/plain'
   },
-  'crossDomain': false,
   'timeout': 0
 };
 
@@ -38,22 +37,25 @@ function ajaxBeforeSend(xhr, options) {
 }
 
 function ajaxSuccess(data, xhr, options) {
-  
-  options['success'].call(options['context'], data, 'success', xhr);
-  options['complete'].call(options['context'], data, 'success', xhr);
-  
-  $.ajax.active--;
+  var success = options['success'];
+  isFunc(success) && success.call(options['context'], data, 'success', xhr);
+  options['global'] && $(document).trigger('ajaxSuccess', [data, 'success', xhr]);
+  ajaxComplete(xhr, options, 'success');
 }
 
-function ajaxError() {
-  
-}
-function ajaxStop() {
-  
+function ajaxError(xhr, options, error, status) {
+  var error = options['error'];
+  isFunc(error) && error.call(options['context'], xhr, options, error);
+  options['global'] && $(document).trigger('ajaxError', [xhr, options, error]);
+  ajaxComplete(xhr, options, status);
 }
 
-function ajaxComplete(xhr, options, status) {
-  
+function ajaxComplete(xhr, options, status) {  
+  var complete = options['complete'];
+  isFunc(complete) && complete.call(options['context'], xhr, options);
+  options['global'] && $(document).trigger('ajaxSuccess', [xhr, options]);
+  if ( ! --$.ajax.active && options['global'])
+    $(document).trigger('ajaxStop');
 }
 
 $.ajax = function(url, options, success) {
@@ -69,9 +71,7 @@ $.ajax = function(url, options, success) {
 
   options = merge($.ajaxSettings, options);
   
-  if (options[''])
-  
-  if ( ! options['crossDomain'])
+  if ( ! ('crossDomain' in options))
     options['crossDomain'] = /^([\w-]+:)?\/\/([^\/]+)/.test(options['url']) && RegExp.$2 != window.location.host;
     
   if (/=\?/.test(options['url']))
@@ -102,20 +102,20 @@ $.ajax = function(url, options, success) {
           ajaxError(null, options, null, 'timeout');
         }, options['timeout']),
         abort = function() {
-          $(script).remove();
+          document.head.removeChild(script);
           window[callback] = function(){};
         };
     
     window[callback] = function(data) {
       timeout && clearTimeout(timeout);
-      $(script).remove(), delete window[callback];
+      document.head.removeChild(script); delete window[callback];
       ajaxSuccess(data, null, options);
     }
     
     script.src = options['url'].replace(/=\?/, '=' + callback);
-    $('head').append(script);
+    document.head.appendChild(script);
 
-    return;
+    return { 'abort': abort };
   }
   else
   {
@@ -148,9 +148,9 @@ $.ajax = function(url, options, success) {
                 dtype === 'xml' ? xhr.responseXML :
                 dtype === 'json' && ! (/^\s*$/.test(xhr.responseText)) ? JSON.parse(xhr.responseText) : xhr.responseText;
           } catch (e) { error = e; status = 'parseerror'; }
-          
+
           if (error) ajaxError(xhr, options, error, status);
-          else ajaxSuccess(xhr, options, status);
+          else ajaxSuccess(result, xhr, options);
         }
         else ajaxError(xhr, options, null, 'error');
       }
@@ -164,7 +164,7 @@ $.ajax = function(url, options, success) {
     
     if (ajaxBeforeSend(xhr, options) === false)
       return false;
-    
+
     xhr.open(options['type'], options['url'], !! options['async'], options['username'], options['password']);
     
     if ('Content-Type' in options)

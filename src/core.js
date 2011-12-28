@@ -770,3 +770,4 @@ var fn = Yocto.prototype = Yocto.fn = {
 
 /* Dynamic Definitions & Aliases */
 Yocto.prototype.some = Yocto.prototype.is;
+Yocto.prototype.remove = Yocto.prototype.detach;

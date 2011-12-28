@@ -4,9 +4,9 @@
  * MIT License
  */
 var FRAG_REGEX = /^\s*<(\w+)[^>]*>/,
-    CLASS_REGEX = /^\.([\w-]+)$/,
-    ID_REGEX = /^#([\w-]+)$/,
-    TAG_REGEX = /^[\w-]+$/,
+    CLASS_REGEX = /^\.([\w\-]+)$/,
+    ID_REGEX = /^#([\w\-]+)$/,
+    TAG_REGEX = /^[\w\-]+$/,
     TABLE = document.createElement('table'),
     TBODY = document.createElement('tbody'),
     DIV = document.createElement('div'),
@@ -50,6 +50,11 @@ var slice   = $Ap.slice,
 
 /* Object Operators */
 var keys = $O.keys,
+    values = function(obj) {
+      return keys(obj).reduce(function(values, key) {
+        return values.concat(obj[key]);
+      }, []);
+    },
     toString = $Op.toString.call;
 
 /* Type Definitions */
@@ -72,8 +77,9 @@ var Arr = function(v) { return flatten.call(arguments); },
 var clean   = function(v) { return v.filter(function(e) { return ! (isNull(e) || (isStr(e) && e.trim() == '')); }); },
     uniq    = function(a) { return isArr(a) ? a.filter(function(v,i) { return a.indexOf(v) === i }) : a; },
     merge   = function(a,b) {
+      if (isNull(b)) return a;
       return uniq(keys(a).concat(keys(b))).reduce(function(o,k) {
-        o[k] = (k in b) ? b[k] : a[k];
+        o[k] = (k in b && b[k] !== undefined) ? b[k] : a[k];
         return o;
       }, {});
     };
@@ -142,7 +148,7 @@ function Yocto(selector, context, prevObject) {
       dom = fragment(selector.trim(), $R.$1), selector = null;
     else if (selector.nodeType === 3)
       dom = [selector], selector = null;
-    else dom = Yocto.query(selector);
+    else dom = $.qsa(selector);
     
     dom.__proto__ = new $(selector, context, prevObject);
     return dom;
@@ -151,12 +157,14 @@ function Yocto(selector, context, prevObject) {
 
 var $ = (window['Yocto'] = window['$'] = Yocto);
 
+$.extend = merge;
+
 /**
  * @param {string} selector
  * @param {Element=} context
  * @return {Array.<Element>}
  */
-Yocto.query = function(selector, context) {
+Yocto.qsa = function(selector, context) {
   var result; context = context || document;
   if (context === document && ID_REGEX.test(selector) && (result = document.getElementById($R.$1)))
     return result ? [result] : [];
@@ -200,14 +208,14 @@ var fn = Yocto.prototype = Yocto.fn = {
   },
   
   /**
-   * @param {(Selector|function(number)|Element|Yocto)} arg1
+   * @param {(Selector|function(this:Element,number)|Element|Yocto)} selector
    * @return {jQuery}
    */
   filter: function(selector) {
-    return $(filter.call(this, function(element, index, obj) {
+    return $(filter.call(this, function(element, index) {
       return $(element).is(isFunc(selector) ? function() {
         return selector.call(element, index);
-      } : selector)
+      } : selector);
     }), null, this);
   },
   
@@ -216,7 +224,7 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @return {Yocto}
    */
   map: function(callback) {
-    return $(map.call(this, function(element, index, obj) {
+    return $(map.call(this, function(element, index) {
       return callback.call(element, index, element);
     }), null, this);
   },
@@ -297,7 +305,7 @@ var fn = Yocto.prototype = Yocto.fn = {
       function(element, index, obj) { return selector.call(element, index); } : 
       function(element, index) {
         return isStr(selector) ? (element['matchesSelector'] || element['webkitMatchesSelector'] || element['mozMatchesSelector'] || element['oMatchesSelector'] || function(selector) {
-          return !!~ $.query(selector, element.parentNode).indexOf(element);
+          return !!~ $.qsa(selector, element.parentNode).indexOf(element);
         }).call(element, selector) : element === selector;
       });
   },
@@ -308,8 +316,8 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @return {Yocto}
    */
   not: function(selector) {
-    return this.filter(function(index, element) {
-      return ! $(element).is(selector);
+    return this.filter(function(index) {
+      return ! $(this).is(selector);
     }, this);
   },
   
@@ -347,8 +355,8 @@ var fn = Yocto.prototype = Yocto.fn = {
    */
   find: function(selector) {
     var context = this;
-    return context.reduce(function(array, element, index, obj) {
-      return uniq(array.concat($.query(selector, element)));
+    return context.reduce(function(array, element) {
+      return uniq(array.concat($.qsa(selector, element)));
     });
   },
   
@@ -358,7 +366,7 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @return {Yocto}
    */
   closest: function(selector, context) {
-    var candidates = $.query(selector, context), node = this[0];
+    var candidates = $.qsa(selector, context), node = this[0];
     if (isNull(selector) || candidates.length === 0)
       return $(null, null, this);
     while (node && candidates.indexOf(node) < 0)
@@ -454,38 +462,6 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @return {Yocto}
    */
   after: function(selector) {
-    $(selector).insert(this, 0); return this;
-  },
-  
-  /**
-   * @param {Selector|function(this:Element,number)} selector
-   * @return {Yocto}
-   */
-  prepend: function(selector) {
-    $(selector).insert(this, 1); return this;
-  },
-  
-  /**
-   * @param {Selector|function(this:Element,number)} selector
-   * @return {Yocto}
-   */
-  before: function(selector) {
-    $(selector).insert(this, 2); return this;
-  },
-  
-  /**
-   * @param {Selector|function(this:Element,number)} selector
-   * @return {Yocto}
-   */
-  append: function(selector) {
-    $(selector).insert(this, 3); return this;
-  },
-  
-  /**
-   * @param {Selector|function(this:Element,number)} selector
-   * @return {Yocto}
-   */
-  insertAfter: function(selector) {
     this.insert(isFunc(selector) ? selector : flatten.call(arguments), 0); return this;
   },
   
@@ -493,7 +469,7 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @param {Selector|function(this:Element,number)} selector
    * @return {Yocto}
    */
-  prependTo: function(selector) {
+  prepend: function(selector) {
     this.insert(isFunc(selector) ? selector : flatten.call(arguments), 1); return this;
   },
   
@@ -501,7 +477,7 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @param {Selector|function(this:Element,number)} selector
    * @return {Yocto}
    */
-  insertBefore: function(selector) {
+  before: function(selector) {
     this.insert(isFunc(selector) ? selector : flatten.call(arguments), 2); return this;
   },
   
@@ -509,8 +485,40 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @param {Selector|function(this:Element,number)} selector
    * @return {Yocto}
    */
-  appendTo: function(selector) {
+  append: function(selector) {
     this.insert(isFunc(selector) ? selector : flatten.call(arguments), 3); return this;
+  },
+  
+  /**
+   * @param {Selector|function(this:Element,number)} selector
+   * @return {Yocto}
+   */
+  insertAfter: function(selector) {
+    $(selector).insert(this, 0); return this;
+  },
+  
+  /**
+   * @param {Selector|function(this:Element,number)} selector
+   * @return {Yocto}
+   */
+  prependTo: function(selector) {
+    $(selector).insert(this, 1); return this;
+  },
+  
+  /**
+   * @param {Selector|function(this:Element,number)} selector
+   * @return {Yocto}
+   */
+  insertBefore: function(selector) {
+    $(selector).insert(this, 2); return this;
+  },
+  
+  /**
+   * @param {Selector|function(this:Element,number)} selector
+   * @return {Yocto}
+   */
+  appendTo: function(selector) {
+    $(selector).insert(this, 3); return this;
   },
   
   /**
@@ -519,7 +527,7 @@ var fn = Yocto.prototype = Yocto.fn = {
    */
   replaceWith: function(context) {
     forEach.call(this, function(element) {
-      element.before(context).detach();
+      $(element).before(context).detach();
     }); return this;
   },
   
@@ -542,7 +550,7 @@ var fn = Yocto.prototype = Yocto.fn = {
   wrapAll: function(selector) {
     var highest, height, length;
     forEach.call(this, function(element) {
-      var length = $(element).parents().length;
+      length = $(element).parents().length;
       if ( ! height || length < height)
         highest = element, height = length;
     }); return $(highest).wrap(selector);
@@ -577,7 +585,10 @@ var fn = Yocto.prototype = Yocto.fn = {
         keys(property).forEach(function(key) {
           this.css(key, property[key]);
         }, this);
-    } else forEach.call(this, function(element, index, obj) {
+    } else forEach.call(this, function(element, index) {
+      value = isFunc(value) ? value.call(element, index, $(element).css(property)) : value;
+      if (isNum(value) && ! property.match(/column(s|count)|columns|font-weight|line-height|opacity|z-index|zoom/gi))
+        value += 'px';
       element.style[camelize(property)] = isFunc(value) ? value.call(element, index, $(element).css(property)) : value;
     });
     return this;
@@ -614,10 +625,9 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @return {(string|Yocto)}
    */
   html: function(string) {
-    if (1 in arguments) return forEach.call(this, function(element, index, obj) {
+    return arguments.length ? forEach.call(this, function(element, index) {
       $(element).empty().append(isFunc(string) ? string.call(element, index, element.innerHTML) : string);
-    }) || this;
-    else return this[0].innerHTML;
+    }) || this : this[0].innerHTML;
   },
   
   /**
@@ -625,10 +635,9 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @return {(string|Yocto)}
    */
   text: function(string) {
-    if (1 in arguments) return forEach.call(this, function(element, index, obj) {
+    return arguments.length ? forEach.call(this, function(element, index) {
       element.textContent = isFunc(string) ? string.call(element, index, element.innerHTML) : string;
-    }) || this;
-    else return this[0].textContent;
+    }) || this : this[0].textContent;
   },
   
   /**
@@ -642,7 +651,7 @@ var fn = Yocto.prototype = Yocto.fn = {
         this[0].getAttribute(name) || this[0][name] || '';
     else forEach.call(this, function(element, index, obj) {
       if (isObj(name)) keys(name).forEach(function(key) { obj.attr(key, name[key]); });
-      else element.setAttribute(name, isFunc(value) ? value.call(element, index, name) : value);
+      else element.setAttribute(name, isFunc(value) ? value.call(element, index, $(element).attr(name)) : value);
     }); return this;
   },
   
@@ -665,7 +674,7 @@ var fn = Yocto.prototype = Yocto.fn = {
    */
   val: function(value) {
     return arguments.length ?
-      forEach.call(this, function(element, index, obj) {
+      forEach.call(this, function(element, index) {
         value = isFunc(value) ? value.call(element, index, $(element).val()) : value;
         if (element.multiple && (value = Arr(value)))
           forEach.call(element.options, function(option) {
@@ -694,7 +703,7 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @return {number}
    */
   index: function(selector) {
-    if (1 in arguments) return this.parent().children().indexOf(this[0]);
+    if ( ! arguments.length) return this.parent().children().indexOf(this[0]);
     for (var i = 0; i < this.length; i++)
       if ($(this[i]).is(selector)) return i;
     return -1;
@@ -740,8 +749,8 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @return {Yocto}
    */
   toggleClass: function(name, add) {
-    forEach.call(this, function(element, index, obj) {
-      var classes = isFunc(name) ? name.call(element, index, element.className) : name, e = $(element);
+    forEach.call(this, function(element, index) {
+      var classes = isFunc(name) ? name.call(element, index, element.className, add) : name, e = $(element);
       classes.split(/\s+/).forEach(function(klass) {
         (isBool(add) ? add : ! e.hasClass(klass)) ? e.addClass(klass) : e.removeClass(klass);
       });
@@ -750,60 +759,359 @@ var fn = Yocto.prototype = Yocto.fn = {
   
   /** @return {number} */
   width: function(value) {
-    return (1 in arguments) ? this.css('width', value) : this.offset().width;
+    return arguments.length ? this.css('width', value) : this.offset().width;
   },
   
   /** @return {number} */
   height: function(value) {
-    return (1 in arguments) ? this.css('height', value) : this.offset().height;
+    return arguments.length ? this.css('height', value) : this.offset().height;
   }
 };
 
 /* Dynamic Definitions & Aliases */
-Yocto.prototype.every = Yocto.prototype.is;/**
- * Yocto Event.js
- * Copyright (c) 2011 Oliver Morgan <oliver.morgan@kohark.com>
- * MIT License
- */
- 
- function add(element, events, fn, selector, getDelegate){
-   var id = zid(element), set = (handlers[id] || (handlers[id] = []));
-   eachEvent(events, fn, function(event, fn){
-     var delegate = getDelegate && getDelegate(fn, event),
-       callback = delegate || fn;
-     var proxyfn = function (event) {
-       var result = callback.apply(element, [event].concat(event.data));
-       if (result === false) event.preventDefault();
-       return result;
-     };
-     var handler = $.extend(parse(event), {fn: fn, proxy: proxyfn, sel: selector, del: delegate, i: set.length});
-     set.push(handler);
-     element.addEventListener(handler.e, proxyfn, false);
-   });
- }
- function remove(element, events, fn, selector){
-   var id = zid(element);
-   eachEvent(events || '', fn, function(event, fn){
-     findHandlers(element, event, fn, selector).forEach(function(handler){
-       delete handlers[id][handler.i];
-       element.removeEventListener(handler.e, handler.proxy, false);
-     });
-   });
- }
- 
-fn.delegate = function(selector, event, callback) {
-  return this.each(function(i, element){
-    add(element, event, callback, selector, function(fn){
-      return function(e){
-        var evt, match = $(e.target).closest(selector, element).get(0);
-        if (match) {
-          evt = $.extend(createProxy(e), {currentTarget: match, liveFired: element});
-          return fn.apply(match, [evt].concat([].slice.call(arguments, 1)));
+Yocto.prototype.some = Yocto.prototype.is;$.ajaxSettings = {
+  'type': 'GET',
+  'async': true,
+  'url': window.location.toString(),
+  'beforeSend': null,
+  'success': null,
+  'error': null,
+  'complete': null,
+  'cache': true,
+  'context': null,
+  'global': true,
+  'xhr': function () {
+    return new window.XMLHttpRequest();
+  },
+  'accepts': {
+    'script': 'text/javascript, application/javascript',
+    'json':   'application/json',
+    'xml':    'application/xml, text/xml',
+    'html':   'text/html',
+    'text':   'text/plain'
+  },
+  'crossDomain': false,
+  'timeout': 0
+};
+
+var jsonpId = 0;
+
+function ajaxBeforeSend(xhr, options) {
+  if (options['global'] && ! $.ajax.active)
+    $(document).trigger('ajaxStart');
+  
+  var beforeSend = options['beforeSend'];
+  if (isFunc(beforeSend) && beforeSend.call(options['context'], xhr, options) === false)
+    return false;
+  
+  $.ajax.active++;
+  options['global'] && $(document).trigger('ajaxSend', [xhr, options]);
+}
+
+function ajaxSuccess(data, xhr, options) {
+  var success = options['success'];
+  isFunc(success) && sucess.call(options['context'], data, 'success', xhr);
+  options['global'] && $(document).trigger('ajaxSuccess', [data, 'success', xhr]);
+  ajaxComplete(xhr, options, 'success');
+}
+
+function ajaxError(xhr, options, error, status) {
+  var error = options['error'];
+  isFunc(error) && error.call(options['context'], xhr, options, error);
+  options['global'] && $(document).trigger('ajaxError', [xhr, options, error]);
+  ajaxComplete(xhr, options, status);
+}
+
+function ajaxComplete(xhr, options, status) {  
+  var complete = options['complete'];
+  isFunc(complete) && complete.call(options['context'], xhr, options);
+  options['global'] && $(document).trigger('ajaxSuccess', [xhr, options]);
+  if ( ! --$.ajax.active && options['global'])
+    $(document).trigger('ajaxStop');
+}
+
+$.ajax = function(url, options, success) {
+  
+  if (isStr(url)) (options = (options || {}))['url'] = url;
+  else options = url, success = options;
+  
+  if (isFunc(success))
+    options['success'] = [success].concat(options['success']);
+    
+  if (options['dataType'] == 'jsonp' || options['dataType'] == 'script')
+    options['async'] = true, options['cache'] = isNull(options['cache']) ? options['cache'] : false;
+
+  options = merge($.ajaxSettings, options);
+  
+  if (options[''])
+  
+  if ( ! options['crossDomain'])
+    options['crossDomain'] = /^([\w-]+:)?\/\/([^\/]+)/.test(options['url']) && RegExp.$2 != window.location.host;
+    
+  if (/=\?/.test(options['url']))
+    options['dataType'] = 'jsonp';
+  
+  if (options['data'] && ! options['contentType'])
+    options['contentType'] = 'application/x-www-form-urlencoded';
+  
+  if (isObj(options['data']))
+    options['data'] = $.param(options['data']);
+    
+  if (options['type'].match(/get/i) && options['data']) {
+    var query = options['data'];
+    options['url'] += options['url'].match(/\?.*=/) ? ('&' + query) : (query[0] != '?') ? ('?' + query) : query;
+  }
+
+  var protocol = /^([\w-]+:)\/\//.test(options['url']) ? RegExp.$1 : window.location.protocol
+  
+  if ( ! options['cache'] && /^http/.test(protocol))
+    options['url'] += (/\.[^\?]+\?.+/g.test(options['url']) ? '?' : '&') + '_=' + (new Date()).getTime();
+  
+  if (options['dataType'] == 'jsonp')
+  {
+    var callback = '__jsonp' + (++jsonpId),
+        script = document.createElement('script'),
+        timeout = options['timeout'] > 0 && setTimeout(function() {
+          abort();
+          ajaxError(null, options, null, 'timeout');
+        }, options['timeout']),
+        abort = function() {
+          $(script).remove();
+          window[callback] = function(){};
+        };
+    
+    window[callback] = function(data) {
+      timeout && clearTimeout(timeout);
+      $(script).remove(), delete window[callback];
+      ajaxSuccess(data, null, options);
+    }
+    
+    script.src = options['url'].replace(/=\?/, '=' + callback);
+    $('head').append(script);
+
+    return;
+  }
+  else
+  {
+    var mime = options['accepts'][options['dataType']],
+    xhr = /** @type {XMLHttpRequest} */ options['xhr'](), timeout, headers = {};
+  
+    if ( ! options['crossDomain'])
+      headers['X-Requested-With'] = 'XMLHttpRequest';
+    
+    if (mime) {
+      headers['Accept'] = mime;
+      xhr.overrideMimeType && xhr.overrideMimeType(mime)
+    }
+    
+    headers = merge(headers, options.headers);
+    
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState == 4) {
+        clearTimeout(timeout);
+        var result, error = false, status = 'success';
+        if ((xhr.status >= 200 && xhr.status < 300) || xhr.status == 304 || (xhr.status == 0 && protocol == 'file:')) {
+          if (xhr.status == 304) status = 'notmodified';
+          var ctype = xhr.getResponseHeader('content-type'), dtype = options['dataType'] ||
+            (/^(text|application)\/javascript/i.test(ctype) ? 'script' :
+             /^application\/json/i.test(ctype) ? 'json' :
+             /^(application|text)\/xml/i.test(ctype) ? 'xml' :
+             /^text\/html/i.test(ctype) === 'text/html' ? 'html' : 'text');
+          try {
+              result = dtype === 'script' ? eval.call(window, xhr.responseText) :
+                dtype === 'xml' ? xhr.responseXML :
+                dtype === 'json' && ! (/^\s*$/.test(xhr.responseText)) ? JSON.parse(xhr.responseText) : xhr.responseText;
+          } catch (e) { error = e; status = 'parseerror'; }
+          
+          if (error) ajaxError(xhr, options, error, status);
+          else ajaxSuccess(xhr, options, status);
         }
+        else ajaxError(xhr, options, null, 'error');
       }
+    };
+    
+    var abort = xhr.abort;
+    xhr.abort = function() {
+      abort.call(xhr);
+      ajaxError(xhr, options, null, 'abort');
+    }
+    
+    if (ajaxBeforeSend(xhr, options) === false)
+      return false;
+    
+    xhr.open(options['type'], options['url'], !! options['async'], options['username'], options['password']);
+    
+    if ('Content-Type' in options)
+      headers['Content-Type'] = options['Content-Type'];
+      
+    for (var name in headers)
+      xhr.setRequestHeader(name, headers[name]);
+      
+    if (options['timeout'] > 0)
+      timeout = setTimeout(function() {
+        xhr.onreadystatechange = null;
+        abort.call(xhr);
+        ajaxError(xhr, options, null, 'timeout');
+      }, options['timeout']);
+      
+    xhr.send(options['data']);
+    return xhr;
+  }
+}
+
+$.ajax.active = 0;
+
+$.post = function(url, data, success, type){
+  if (isFunc(data)) type = type || success, success = data, data = null;
+  return $.ajax({ 'type': 'POST', 'url': url, 'data': data, 'success': success, 'dataType': type });
+};
+
+$.get = function(url, success, type){
+  return $.ajax({ 'type': 'GET', 'url': url, 'success': success, 'dataType': type });
+};
+
+$.getJSON = function(url, success){
+  return $.get(url, success, 'json');
+};
+
+fn.load = function(url, options, success) {
+  if ( ! this.length) return this;
+  if (isFunc(options)) options = { 'success': options };
+  var self = this, parts = url.split(/\s+/), selector;
+  if (parts.length > 0) url = parts[0], selector = parts[1];
+  $.ajax(url, options, function(response) {
+    self.html(selector ? $('<div>').html(response).find(selector).html() : response);
+    success && success.call(self);
+  }); return this;
+};
+
+var esc = encodeURIComponent;
+$.query = function(obj, prefix) {
+  return isObj(obj) ? keys(obj).reduce(function(pairs, name) {
+    var key = prefix ? prefix + (isArr(obj) ? '[]' : '[' + esc(name) + ']') : esc(name), value = obj[name];
+    return pairs.concat(isObj(value) ? param(value, key) : key + '=' + esc(value));
+  }, []).join('&') : obj;
+};var idOffset = 0, eventCallbacks = {};
+
+function elementId(element) {
+  return element['__yid__'] || (element['__yid__'] = ++idOffset);
+}
+
+fn.bind = function(type, data, callback) {
+  this.on(type, null, data, callback);
+};
+
+fn.on = function(type, selector, data, callback) {
+  if (isObj(type)) return keys(type).forEach(function(event) {
+    this.on(event, selector, data, type[event]);
+  }, this) || this;
+  
+  if (isNull(callback) && isFunc(data)) {
+    if (isStr(selector)) { callback = data; data = null;  }
+    else { callback = data; data = selector; selector = null; }
+  }
+  else if (isFunc(selector)) { callback = selector; selector = null; }
+  
+  type.split(/\s+/).forEach(function(type) {
+    forEach.call(this, function(element) {
+      var id = elementId(element), proxy;
+      if ( ! (id in eventCallbacks)) eventCallbacks[id] = {};
+      if ( ! (type in eventCallbacks[id])) eventCallbacks[id][type] = [];
+      callback['__yid__'] = eventCallbacks[id][type].push(proxy = function(event) {
+        if (selector && ! $(event.target).is(selector)) return;
+        event.data = data;
+        var params = [event].concat((event['params'] || []), data),
+            result = isFunc(callback) ? callback.apply(event.target, params) : callback;
+        if (result === false) event.preventDefault();
+        return result;
+      }) - 1;
+      element.addEventListener(type, proxy);
+    });
+  }, this); return this;
+};
+
+fn.unbind = fn.off = function(type, callback) {
+  var index = arguments.length ? callback['__yid__'] : false;
+  if (isNull(index)) return this;
+  forEach.call(this, function(element) {
+    var id = elementId(element), proxies;
+    if ( ! (id in eventCallbacks) ||  ! (type in eventCallbacks[id])) return;
+    proxies = isNum(index) ? [eventCallbacks[id][type][index]] : eventCallbacks[id][type];
+    proxies.forEach(function(proxy) {
+      element.removeEventListener(type, proxy);
+      delete eventCallbacks[id][type][index];
     });
   });
-}/**
+};
+
+fn.trigger = function(event, params) {
+  event = isObj(event) ? event : $.Event(event, params);
+  forEach.call(this, function(element) {
+    element.dispatchEvent(event);
+  }); return this;
+};
+
+function eventTypeParameters(name, data) {
+  
+  switch (name) {
+    case 'MouseEvent': return merge({
+      'bubbles': true,
+      'cancelable': true,
+      'view': window,
+      'detail': 0,
+      'screenX': 0, 'screenY': 0,
+      'clickX': 0, 'clickY': 0,
+      'ctrlKey':  false, 'altKey': false, 'shiftKey': false, 'metaKey': false,
+      'button': 0,
+      'relatedTarget': null
+    }, data);
+    case 'KeyboardEvent': return merge({
+      'bubbles': true,
+      'cancelable': true,
+      'view': window,
+      'char': null,
+      'key': null,
+      'location': 0,
+      'modifiersList': null,
+      'repeat': false,
+      'locale': null
+    }, data);
+    case 'FocusEvent': return merge({
+      'bubbles': true,
+      'cancelable': true,
+      'deatil': 0
+    }, data);
+    case 'CustomEvent': return merge({
+      'bubbles': true,
+      'cancelable': true,
+      'detail': null
+    }, data);
+  }
+}
+
+$.eventTypes = {
+  'MouseEvent': /^((dbl)?click$|mouse).*/i,
+  'KeyboardEvent': /^(textInput$|key).*/i,
+  'FocusEvent': /^(blur$|focus).*/i,
+  'CustomEvent': /.+/
+}
+
+/**
+ * @constructor
+ * @param {string} type
+ * @return {$.Event}
+ */
+$.Event = function(type, data) {
+  var event;
+  for (var name in $.eventTypes) { if ( ! $.eventTypes.hasOwnProperty(name)) continue;
+    if ($.eventTypes[name].test(type)) {
+      event = document.createEvent(name);
+      event['init' + name].apply(event, [type].concat(values(eventTypeParameters(name, data))));
+      break;
+    }
+  }
+  return event;
+};/**
  * Yocto Polyfill.js
  * Copyright (c) 2011 Oliver Morgan <oliver.morgan@kohark.com>
  * MIT License
