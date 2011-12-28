@@ -4,9 +4,9 @@
  * MIT License
  */
 var FRAG_REGEX = /^\s*<(\w+)[^>]*>/,
-    CLASS_REGEX = /^\.([\w-]+)$/,
-    ID_REGEX = /^#([\w-]+)$/,
-    TAG_REGEX = /^[\w-]+$/,
+    CLASS_REGEX = /^\.([\w\-]+)$/,
+    ID_REGEX = /^#([\w\-]+)$/,
+    TAG_REGEX = /^[\w\-]+$/,
     TABLE = document.createElement('table'),
     TBODY = document.createElement('tbody'),
     DIV = document.createElement('div'),
@@ -50,6 +50,11 @@ var slice   = $Ap.slice,
 
 /* Object Operators */
 var keys = $O.keys,
+    values = function(obj) {
+      return keys(obj).reduce(function(values, key) {
+        return values.concat(obj[key]);
+      }, []);
+    },
     toString = $Op.toString.call;
 
 /* Type Definitions */
@@ -72,8 +77,9 @@ var Arr = function(v) { return flatten.call(arguments); },
 var clean   = function(v) { return v.filter(function(e) { return ! (isNull(e) || (isStr(e) && e.trim() == '')); }); },
     uniq    = function(a) { return isArr(a) ? a.filter(function(v,i) { return a.indexOf(v) === i }) : a; },
     merge   = function(a,b) {
+      if (isNull(b)) return a;
       return uniq(keys(a).concat(keys(b))).reduce(function(o,k) {
-        o[k] = (k in b) ? b[k] : a[k];
+        o[k] = (k in b && b[k] !== undefined) ? b[k] : a[k];
         return o;
       }, {});
     };
@@ -142,7 +148,7 @@ function Yocto(selector, context, prevObject) {
       dom = fragment(selector.trim(), $R.$1), selector = null;
     else if (selector.nodeType === 3)
       dom = [selector], selector = null;
-    else dom = Yocto.query(selector);
+    else dom = $.qsa(selector);
     
     dom.__proto__ = new $(selector, context, prevObject);
     return dom;
@@ -151,12 +157,14 @@ function Yocto(selector, context, prevObject) {
 
 var $ = (window['Yocto'] = window['$'] = Yocto);
 
+$.extend = merge;
+
 /**
  * @param {string} selector
  * @param {Element=} context
  * @return {Array.<Element>}
  */
-Yocto.query = function(selector, context) {
+Yocto.qsa = function(selector, context) {
   var result; context = context || document;
   if (context === document && ID_REGEX.test(selector) && (result = document.getElementById($R.$1)))
     return result ? [result] : [];
@@ -297,7 +305,7 @@ var fn = Yocto.prototype = Yocto.fn = {
       function(element, index, obj) { return selector.call(element, index); } : 
       function(element, index) {
         return isStr(selector) ? (element['matchesSelector'] || element['webkitMatchesSelector'] || element['mozMatchesSelector'] || element['oMatchesSelector'] || function(selector) {
-          return !!~ $.query(selector, element.parentNode).indexOf(element);
+          return !!~ $.qsa(selector, element.parentNode).indexOf(element);
         }).call(element, selector) : element === selector;
       });
   },
@@ -348,7 +356,7 @@ var fn = Yocto.prototype = Yocto.fn = {
   find: function(selector) {
     var context = this;
     return context.reduce(function(array, element) {
-      return uniq(array.concat($.query(selector, element)));
+      return uniq(array.concat($.qsa(selector, element)));
     });
   },
   
@@ -358,7 +366,7 @@ var fn = Yocto.prototype = Yocto.fn = {
    * @return {Yocto}
    */
   closest: function(selector, context) {
-    var candidates = $.query(selector, context), node = this[0];
+    var candidates = $.qsa(selector, context), node = this[0];
     if (isNull(selector) || candidates.length === 0)
       return $(null, null, this);
     while (node && candidates.indexOf(node) < 0)
@@ -666,7 +674,7 @@ var fn = Yocto.prototype = Yocto.fn = {
    */
   val: function(value) {
     return arguments.length ?
-      forEach.call(this, function(element, index, obj) {
+      forEach.call(this, function(element, index) {
         value = isFunc(value) ? value.call(element, index, $(element).val()) : value;
         if (element.multiple && (value = Arr(value)))
           forEach.call(element.options, function(option) {

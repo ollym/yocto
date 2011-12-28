@@ -27,7 +27,8 @@ fn.on = function(type, selector, data, callback) {
       callback['__yid__'] = eventCallbacks[id][type].push(proxy = function(event) {
         if (selector && ! $(event.target).is(selector)) return;
         event.data = data;
-        var result = isFunc(callback) ? callback.apply(event.target, [event].concat(data || [])) : callback;
+        var params = [event].concat((event['params'] || []), data),
+            result = isFunc(callback) ? callback.apply(event.target, params) : callback;
         if (result === false) event.preventDefault();
         return result;
       }) - 1;
@@ -57,13 +58,55 @@ fn.trigger = function(event, params) {
   }); return this;
 };
 
-$.Event = function(type, props) {
+function eventTypeParameters(name, data) {
+  
+  switch (name) {
+    case 'MouseEvent': return merge({
+      'bubbles': true,
+      'cancelable': true,
+      'view': window,
+      'detail': 0,
+      'screenX': 0, 'screenY': 0,
+      'clickX': 0, 'clickY': 0,
+      'ctrlKey':  false, 'altKey': false, 'shiftKey': false, 'metaKey': false,
+      'button': 0,
+      'relatedTarget': null
+    }, data);
+    case 'KeyboardEvent': return merge({
+      'bubbles': true,
+      'cancelable': true,
+      'view': window,
+      'char': null,
+      'key': null,
+      'location': 0,
+      'modifiersList': null,
+      'repeat': false,
+      'locale': null
+    }, data);
+    case 'FocusEvent': return merge({'deatil': 0}, data);
+  }
+}
+
+$.eventTypes = {
+  'MouseEvent': /^((dbl)?click$|mouse).*/i,
+  'KeyboardEvent': /^(textInput$|key).*/i,
+  'FocusEvent': /^(blur$|focus).*/i,
+  'CustomEvent': /.+/
+}
+
+/**
+ * @constructor
+ * @param {string} type
+ * @return {$.Event}
+ */
+$.Event = function(type, data) {
   var event;
-  if (type.match(/^(click$|mouse).*/i) && (event = document.createEvent('MouseEvent')))
-    event.initMouseEvent("click", true, true, window, 0, 0, 0, 0, 0, false, false, false, false, 0, null);
-  else if (type.match(/^(textInput$|key).*/i) && (event = document.createEvent('KeyBoardEvent')))
-    event.initKeyEvent(type, true, true, null, false, false, false, false, 0, 0);
-  else (event = document.createEvent('Events')).initEvent(type, true, true);
-  if (isObj(props)) keys(props).forEach(function(key) { event[key] = props[key]; });
+  for (var name in $.eventTypes) { if ( ! $.eventTypes.hasOwnProperty(name)) continue;
+    if ($.eventTypes[name].test(type)) {
+      event = document.createEvent(name);
+      event['init' + name].apply(event, [type].concat(values(eventTypeParameters(name, data))));
+      break;
+    }
+  }
   return event;
 };
