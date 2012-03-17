@@ -1,4 +1,4 @@
-$.ajaxSettings = {
+Yocto.ajaxSettings = {
   'type': 'GET',
   'async': true,
   'url': window.location.toString(),
@@ -9,6 +9,7 @@ $.ajaxSettings = {
   'cache': true,
   'context': null,
   'global': true,
+  'xhrFields': {},
   'xhr': function () {
     return new window.XMLHttpRequest();
   },
@@ -22,54 +23,87 @@ $.ajaxSettings = {
   'timeout': 0
 };
 
-var jsonpId = 0;
+Yocto.param = function(obj, prefix) {
+  return Yocto.isObject(obj) ? Yocto.keys(obj).reduce(function(pairs, name) {
+    var key = prefix ? prefix + (Yocto.isArray(obj) ? '[]' : '[' + encodeURIComponent(name) + ']') : encodeURIComponent(name), value = obj[name];
+    return pairs.concat(Yocto.isObject(value) ? Yocto.param(value, key) : key + '=' + encodeURIComponent(value));
+  }, []).join('&') : obj;
+};
 
-function ajaxBeforeSend(xhr, options) {
-  if (options['global'] && ! $.ajax.active)
+Yocto.deparam = function(query) {
+  return query.split('&').reduce(function(obj, pair) {
+    var parts = pair.split('='), path = parts[0].replace(/\[([^\]]+)\]/g, '.$1').split('.');
+    return Yocto.extend(true, obj, path.reverse().reduce(function(value, key) {
+      if(Yocto.isString(value)) value = decodeURIComponent(value);
+      value = ! isNaN(value) ? Number(value) : /true|false/.test(value) ? value == 'true' : value == 'null' ? null : value;
+      while (key.match(/\[\]$/))
+        value = [value], key = key.substr(0, key.length - 2);
+      pair = {}, pair[decodeURIComponent(key)] = value;
+      return pair;
+    }, decodeURIComponent(parts[1])));
+  }, {});
+};
+
+Yocto._jsonpId = 0;
+
+/**
+ * @private
+ */
+Yocto._beforeSend = function(xhr, options) {
+  if (options['global'] && ! Yocto.ajax.active)
     $(document).trigger('ajaxStart');
-  
+
   var beforeSend = options['beforeSend'];
-  if (isFunc(beforeSend) && beforeSend.call(options['context'], xhr, options) === false)
+  if (Yocto.isFunction(beforeSend) && beforeSend.call(options['context'], xhr, options) === false)
     return false;
-  
-  $.ajax.active++;
+
+  Yocto.ajax.active++;
   options['global'] && $(document).trigger('ajaxSend', [xhr, options]);
 }
 
-function ajaxSuccess(data, xhr, options) {
+/**
+ * @private
+ */
+Yocto._ajaxSuccess = function(data, xhr, options) {
   var success = options['success'];
-  isFunc(success) && success.call(options['context'], data, 'success', xhr);
+  Yocto.isFunction(success) && success.call(options['context'], data, 'success', xhr);
   options['global'] && $(document).trigger('ajaxSuccess', [data, 'success', xhr]);
-  ajaxComplete(xhr, options, 'success');
+  Yocto._ajaxComplete(xhr, options, 'success');
 }
 
-function ajaxError(xhr, options, error, status) {
+/**
+ * @private
+ */
+Yocto._ajaxError = function(xhr, options, error, status) {
   var error = options['error'];
-  isFunc(error) && error.call(options['context'], xhr, options, error);
+  Yocto.isFunction(error) && error.call(options['context'], xhr, options, error);
   options['global'] && $(document).trigger('ajaxError', [xhr, options, error]);
-  ajaxComplete(xhr, options, status);
+  Yocto._ajaxComplete(xhr, options, status);
 }
 
-function ajaxComplete(xhr, options, status) {  
+/**
+ * @private
+ */
+Yocto._ajaxComplete = function(xhr, options, status) {  
   var complete = options['complete'];
-  isFunc(complete) && complete.call(options['context'], xhr, options);
+  Yocto.isFunction(complete) && complete.call(options['context'], xhr, options);
   options['global'] && $(document).trigger('ajaxSuccess', [xhr, options]);
-  if ( ! --$.ajax.active && options['global'])
+  if ( ! --Yocto.ajax.active && options['global'])
     $(document).trigger('ajaxStop');
 }
 
-$.ajax = function(url, options, success) {
+Yocto.ajax = function(url, options, success) {
   
-  if (isStr(url)) (options = (options || {}))['url'] = url;
+  if (Yocto.isString(url)) (options = (options || {}))['url'] = url;
   else options = url, success = options;
   
-  if (isFunc(success))
+  if (Yocto.isFunction(success))
     options['success'] = [success].concat(options['success']);
     
   if (options['dataType'] == 'jsonp' || options['dataType'] == 'script')
     options['async'] = true, options['cache'] = isNull(options['cache']) ? options['cache'] : false;
 
-  options = merge($.ajaxSettings, options);
+  options = Yocto.extend(Yocto.ajaxSettings, options);
   
   if ( ! ('crossDomain' in options))
     options['crossDomain'] = /^([\w-]+:)?\/\/([^\/]+)/.test(options['url']) && RegExp.$2 != window.location.host;
@@ -80,8 +114,8 @@ $.ajax = function(url, options, success) {
   if (options['data'] && ! options['contentType'])
     options['contentType'] = 'application/x-www-form-urlencoded';
   
-  if (isObj(options['data']))
-    options['data'] = $.param(options['data']);
+  if (Yocto.isObject(options['data']))
+    options['data'] = Yocto.param(options['data']);
     
   if (options['type'].match(/get/i) && options['data']) {
     var query = options['data'];
@@ -95,33 +129,36 @@ $.ajax = function(url, options, success) {
   
   if (options['dataType'] == 'jsonp')
   {
-    var callback = '__jsonp' + (++jsonpId),
+    var callback = '__jsonp' + (++Yocto._jsonpId),
         script = document.createElement('script'),
         timeout = options['timeout'] > 0 && setTimeout(function() {
-          abort();
-          ajaxError(null, options, null, 'timeout');
+          xhr['abort']();
+          Yocto._ajaxError(null, options, null, 'timeout');
         }, options['timeout']),
-        abort = function() {
+        xhr = { 'abort': function() {
           document.head.removeChild(script);
           window[callback] = function(){};
-        };
+        }};
     
     window[callback] = function(data) {
       timeout && clearTimeout(timeout);
       document.head.removeChild(script); delete window[callback];
-      ajaxSuccess(data, null, options);
+      Yocto._ajaxSuccess(data, null, options);
     }
+    
+    if (Yocto._beforeSend(xhr, options) === false)
+      return false;
     
     script.src = options['url'].replace(/=\?/, '=' + callback);
     document.head.appendChild(script);
 
-    return { 'abort': abort };
+    return xhr;
   }
   else
   {
     var mime = options['accepts'][options['dataType']],
-    xhr = /** @type {XMLHttpRequest} */ options['xhr'](), timeout, headers = {};
-  
+    xhr = /** @type {XMLHttpRequest} */ Yocto.extend(options['xhr'](), options['xhrFields']), timeout, headers = {};
+    
     if ( ! options['crossDomain'])
       headers['X-Requested-With'] = 'XMLHttpRequest';
     
@@ -130,7 +167,7 @@ $.ajax = function(url, options, success) {
       xhr.overrideMimeType && xhr.overrideMimeType(mime)
     }
     
-    headers = merge(headers, options.headers);
+    headers = Yocto.extend(headers, options['headers']);
     
     xhr.onreadystatechange = function() {
       if (xhr.readyState == 4) {
@@ -138,46 +175,45 @@ $.ajax = function(url, options, success) {
         var result, error = false, status = 'success';
         if ((xhr.status >= 200 && xhr.status < 300) || xhr.status == 304 || (xhr.status == 0 && protocol == 'file:')) {
           if (xhr.status == 304) status = 'notmodified';
-          var ctype = xhr.getResponseHeader('content-type'), dtype = options['dataType'] ||
-            (/^(text|application)\/javascript/i.test(ctype) ? 'script' :
-             /^application\/json/i.test(ctype) ? 'json' :
-             /^(application|text)\/xml/i.test(ctype) ? 'xml' :
-             /^text\/html/i.test(ctype) === 'text/html' ? 'html' : 'text');
+          var ctype = xhr.getResponseHeader('content-type'), match, dtype = options['dataType'] ||
+            (ctype ? (match = ctype.match(/^(?:application|text)\/(json|xml)/i)) && match[1] :
+            (match = options['url'].match(/\.(json|xml)$/i)) && match[1]) || 'text';
           try {
               result = dtype === 'script' ? eval.call(window, xhr.responseText) :
-                dtype === 'xml' ? xhr.responseXML :
-                dtype === 'json' && ! (/^\s*$/.test(xhr.responseText)) ? JSON.parse(xhr.responseText) : xhr.responseText;
+                dtype == 'xml' ? xhr.responseXML :
+                dtype == 'json' && ! (/^\s*$/.test(xhr.responseText)) ? JSON.parse(xhr.responseText) : xhr.responseText;
           } catch (e) { error = e; status = 'parseerror'; }
 
-          if (error) ajaxError(xhr, options, error, status);
-          else ajaxSuccess(result, xhr, options);
+          if (error) Yocto._ajaxError(xhr, options, error, status);
+          else Yocto._ajaxSuccess(result, xhr, options);
         }
-        else ajaxError(xhr, options, null, 'error');
+        else Yocto._ajaxError(xhr, options, null, 'error');
       }
     };
     
     var abort = xhr.abort;
     xhr.abort = function() {
       abort.call(xhr);
-      ajaxError(xhr, options, null, 'abort');
+      Yocto._ajaxError(xhr, options, null, 'abort');
     }
     
-    if (ajaxBeforeSend(xhr, options) === false)
+    if (Yocto._beforeSend(xhr, options) === false)
       return false;
 
     xhr.open(options['type'], options['url'], !! options['async'], options['username'], options['password']);
     
-    if ('Content-Type' in options)
-      headers['Content-Type'] = options['Content-Type'];
-      
-    for (var name in headers)
-      xhr.setRequestHeader(name, headers[name]);
+    if ('contentType' in options)
+      headers['Content-Type'] = options['contentType'];
+    
+    Yocto.each(headers, function(name, value) {
+      xhr.setRequestHeader(name, value);
+    });
       
     if (options['timeout'] > 0)
       timeout = setTimeout(function() {
         xhr.onreadystatechange = null;
         abort.call(xhr);
-        ajaxError(xhr, options, null, 'timeout');
+        Yocto._ajaxError(xhr, options, null, 'timeout');
       }, options['timeout']);
       
     xhr.send(options['data']);
@@ -185,36 +221,63 @@ $.ajax = function(url, options, success) {
   }
 }
 
-$.ajax.active = 0;
+Yocto.ajax.active = 0;
 
-$.post = function(url, data, success, type){
-  if (isFunc(data)) type = type || success, success = data, data = null;
-  return $.ajax({ 'type': 'POST', 'url': url, 'data': data, 'success': success, 'dataType': type });
+Yocto.post = function(url, data, success, type) {
+  if (Yocto.isFunction(data)) type = type || success, success = data, data = null;
+  return Yocto.ajax({
+    'type': 'POST',
+    'url': url,
+    'data': data,
+    'success': success,
+    'dataType': type
+  });
 };
 
-$.get = function(url, success, type){
-  return $.ajax({ 'type': 'GET', 'url': url, 'success': success, 'dataType': type });
+Yocto.get = function(url, success, type){
+  return Yocto.ajax({
+    'type': 'GET',
+    'url': url,
+    'success': success,
+    'dataType': type
+  });
 };
 
-$.getJSON = function(url, success){
-  return $.get(url, success, 'json');
+Yocto.getJSON = function(url, success){
+  return Yocto.get(url, success, 'json');
 };
 
-fn.load = function(url, options, success) {
+Yocto.prototype.load = function(url, options, success) {
   if ( ! this.length) return this;
-  if (isFunc(options)) options = { 'success': options };
+  if (Yocto.isFunction(options)) options = { 'success': options };
   var self = this, parts = url.split(/\s+/), selector;
   if (parts.length > 0) url = parts[0], selector = parts[1];
-  $.ajax(url, options, function(response) {
+  Yocto.ajax(url, options, function(response) {
     self.html(selector ? $('<div>').html(response).find(selector).html() : response);
     success && success.call(self);
   }); return this;
 };
 
-var esc = encodeURIComponent;
-$.query = function(obj, prefix) {
-  return isObj(obj) ? keys(obj).reduce(function(pairs, name) {
-    var key = prefix ? prefix + (isArr(obj) ? '[]' : '[' + esc(name) + ']') : esc(name), value = obj[name];
-    return pairs.concat(isObj(value) ? param(value, key) : key + '=' + esc(value));
-  }, []).join('&') : obj;
+/* Event Methods */
+Yocto.prototype.ajaxStart = function(callback) {
+  return $(document).bind('ajaxStart', function() {
+    
+  }, this);
+};
+
+Yocto.prototype.ajaxSend = function(callback) {
+  var elements = this;
+  $(document).bind('ajaxSend', function(event, xhr, options) {
+    elements.forEach(function(element) {
+      callback.call(element, event, xhr, options);
+    });
+  }, this); return elements;
+};
+
+Yocto.ajaxSuccess = function(callback) {
+  return this.bind('ajaxSuccess', callback);
+};
+
+Yocto.ajaxError = function(callback) {
+  return this.bind('ajaxError', callback);
 };

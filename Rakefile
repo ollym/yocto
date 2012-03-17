@@ -1,24 +1,24 @@
-require 'rubygems'
+require 'rake/packagetask'
+require 'net/http'
+require 'uri'
 require 'zlib'
-require 'closure-compiler'
 
-desc "Use the Closure Compiler to compress Yocto"
-task :build do
+desc "Build zepto testing distribution for fast development."
+task :dist do
+
+  src = '';
   
-  src = "(function(){#{File.read('src/core.js')}"
   Dir.glob('src/**/*.js') do | file |
-    if (file != 'src/core.js')
-      src += File.read(file);
-    end
+    src += File.read(file) + "\n";
   end
-  src += '})();'
   
-  min = Closure::Compiler.new(
-    :compilation_level => 'ADVANCED_OPTIMIZATIONS',
-    :externs => 'build/extern.js'
-    #:formatting => 'pretty_print'
-  ).compile(src)
-  
+  min = Net::HTTP.post_form(URI.parse('http://closure-compiler.appspot.com/compile'), {
+    'js_code' => src,
+    'output_format' => 'text',
+    'compilation_level' => 'SIMPLE_OPTIMIZATIONS',
+    'output_info' => 'compiled_code'
+  });
+    
   File.open('dist/yocto.js', 'w') do |file|
     file.write src
     file.close
@@ -36,8 +36,8 @@ task :build do
   raw = File.size('dist/yocto.js').to_f;
   min = File.size('dist/yocto.min.js').to_f;
   gzip = File.size('dist/yocto.min.js.gz').to_f;
-  
-  puts "Original: %0.3f kb" % (raw/1000);
-  puts "Minified: %0.3f kb : %0.3f" % [(min/1000), (raw/min)];
-  puts "Gzipped:  %0.3f  kb : %0.3f" % [(gzip/1000), (min/gzip)];
+
+  puts "Original: %0.3f kb" % (raw / 1024);
+  puts "Minified: %0.3f kb : %0.3f" % [(min / 1024), (raw/min)];
+  puts "Gzipped:  %0.3f kb : %0.3f" % [(gzip / 1024), (min/gzip)];
 end

@@ -1,4 +1,7 @@
 module('Core');
+
+var $ = Yocto;
+
 var ready = false;
 $(function() { ready = true; });
 
@@ -6,7 +9,7 @@ test('Yocto', function() {
   equal(typeof $, 'function');
   
   var a = $(), b = $();
-  ok(a instanceof $);
+  ok(a instanceof Yocto);
   ok(a !== b);
   
   equal($(document).length, 1);
@@ -22,7 +25,7 @@ test('Yocto(fragment)', function() {
   var fragment = $('<div>');
   equal(fragment.length, 1);
   equal('<div></div>', fragment[0].outerHTML);
-  equal(fragment.selector, '');
+  equal(fragment.selector, null);
   
   fragment = $('<script>window.foo="bar";</script>');
   equal(fragment.length, 1);
@@ -31,21 +34,21 @@ test('Yocto(fragment)', function() {
   fragment = $('<div>hello world</div>');
   equal(fragment.length, 1);
   equal('<div>hello world</div>', fragment[0].outerHTML);
-  equal(fragment.selector, '');
+  equal(fragment.selector, null);
 
   fragment = $('<div>hello</div> <span>world</span>');
   equal(fragment.length, 3);
   equal('<div>hello</div>', fragment[0].outerHTML);
   equal(Node.TEXT_NODE, fragment[1].nodeType);
   equal('<span>world</span>', fragment[2].outerHTML);
-  equal(fragment.selector, '');
+  equal(fragment.selector, null);
 
   fragment = $('<div>\nhello</div> \n<span>world</span>');
   equal(fragment.length, 3);
   equal('<div>\nhello</div>', fragment[0].outerHTML);
   equal(Node.TEXT_NODE, fragment[1].nodeType);
   equal('<span>world</span>', fragment[2].outerHTML);
-  equal(fragment.selector, '');
+  equal(fragment.selector, null);
 
   fragment = $('<div>hello</div> ');
   equal(fragment.length, 1);
@@ -102,21 +105,15 @@ test('Yocto#reduce', function() {
     return a.concat(b);
   });
   
-  ok(result instanceof $);
+  ok(result instanceof Yocto);
   equal(result.prevObject, foo);
   equal(i, foo.length);
   deepEqual(result, foo);
 });
-test('Yocto#concat', function() {
-  var all = $('#root, .bar'), foo = $('#root'), concat = foo.concat('.bar');
-  ok(concat instanceof $);
-  equal(concat.length, all.length);
-  equal(concat.prevObject, foo);
-  ok(concat.is(all));
-});
+
 test('Yocto#slice', function() {
   var items = $('.foo, .bar'), slice = items.slice(1,3);
-  ok(slice instanceof $);
+  ok(slice instanceof Yocto);
   equal(slice.length, 2);
   equal(slice.prevObject, items);
   ok([].every.call(slice, function(element, i) {
@@ -130,7 +127,7 @@ test('Yocto#filter', function() {
     equal(index, i++);
     return !!(i % 2);
   });
-  ok(result instanceof $);
+  ok(result instanceof Yocto);
   equal(result.prevObject, items);
   equal(i, items.length);
   deepEqual(result, [items[0], items[2], items[4]]);
@@ -147,7 +144,7 @@ test('Yocto#map', function() {
     return element.parentNode;
   });
 
-  ok(result instanceof $);
+  ok(result instanceof Yocto);
   equal(result.prevObject, items);
   equal(i, items.length);
   deepEqual(result, parents);
@@ -279,8 +276,8 @@ test('Yocto#show', function() {
   deepEqual(getDisplay(), 'inline');
 });
 test('Yocto#insert', function() {
-  $('#root').insert('<div><script>window.foo="bar";</script></div>');
-  equal(window.foo, 'bar'); delete window.foo;
+  $('#root').insert('<div><script>window["foo"]="bar";</script></div>');
+  equal(window['foo'], 'bar'); delete window['foo'];
   var bar = $('.bar');
   var nodes = bar.insert(function(index) {
     strictEqual(this, bar[index]);
@@ -433,7 +430,7 @@ test('Yocto#text', function() {
   }));
 });
 test('Yocto#attr', function() {
-  equal($('#root').attr('id'), 'root'), obj = $('.bar');
+  equal($('#root').attr('id'), 'root'); var obj = $('.bar');
   equal(obj.attr('class', function(index, value) {
     equal(value, this.className);
     strictEqual(this, obj[index]);

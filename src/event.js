@@ -1,34 +1,56 @@
-var idOffset = 0, eventCallbacks = {};
-
-function elementId(element) {
-  return element['__yid__'] || (element['__yid__'] = ++idOffset);
+/**
+ * Gives a DOM node a unique identifier.
+ * @param {Element} element
+ * @return {number}
+ * @private
+ */
+Yocto._elementId = function(element) {
+  return element['__yid__'] || (element['__yid__'] = ++Yocto._elementIdOffset);
 }
 
-fn.bind = function(type, data, callback) {
+/**
+ * @type {number}
+ * @private
+ */
+Yocto._elementIdOffset = 0;
+
+/**
+ * @type {Object.<number,function(this:Element,Event)>}
+ * @private
+ */
+Yocto._eventCallbacks = {};
+
+/**
+ * Binds to an event on all matched elements.
+ * @public
+ */
+Yocto.prototype.bind = function(type, data, callback) {
   this.on(type, null, data, callback);
 };
 
-fn.on = function(type, selector, data, callback) {
-  if (isObj(type)) return keys(type).forEach(function(event) {
+/**
+ * Binds to an event on all matched elements.
+ * @public
+ */
+Yocto.prototype.on = function(type, selector, data, callback) {
+  if (Yocto.isObject(type)) return Yocto.keys(type).forEach(function(event) {
     this.on(event, selector, data, type[event]);
   }, this) || this;
-  
-  if (isNull(callback) && isFunc(data)) {
-    if (isStr(selector)) { callback = data; data = null;  }
+  if (Yocto.isNull(callback) && Yocto.isFunction(data)) {
+    if (Yocto.isString(selector)) { callback = data; data = null;  }
     else { callback = data; data = selector; selector = null; }
   }
-  else if (isFunc(selector)) { callback = selector; selector = null; }
-  
+  else if (Yocto.isFunction(selector)) { callback = selector; selector = null; }
   type.split(/\s+/).forEach(function(type) {
-    forEach.call(this, function(element) {
-      var id = elementId(element), proxy;
-      if ( ! (id in eventCallbacks)) eventCallbacks[id] = {};
-      if ( ! (type in eventCallbacks[id])) eventCallbacks[id][type] = [];
-      callback['__yid__'] = eventCallbacks[id][type].push(proxy = function(event) {
+    this.forEach(function(element) {
+      var id = Yocto._elementId(element), proxy;
+      if ( ! (id in Yocto._eventCallbacks)) Yocto._eventCallbacks[id] = {};
+      if ( ! (type in Yocto._eventCallbacks[id])) Yocto._eventCallbacks[id][type] = [];
+      callback['__yid__'] = Yocto._eventCallbacks[id][type].push(proxy = function(event) {
         if (selector && ! $(event.target).is(selector)) return;
         event.data = data;
-        var params = [event].concat((event['params'] || []), data),
-            result = isFunc(callback) ? callback.apply(event.target, params) : callback;
+        var params = [event].concat((Array.isArray(event['data']) ? event['data'] : []), data),
+            result = Yocto.isFunction(callback) ? callback.apply(event.target, params) : callback;
         if (result === false) event.preventDefault();
         return result;
       }) - 1;
@@ -37,85 +59,89 @@ fn.on = function(type, selector, data, callback) {
   }, this); return this;
 };
 
-fn.unbind = fn.off = function(type, callback) {
+Yocto.prototype.one = function(type, callback) {
+  var self = this;
+  this.bind(type, function() {
+    callback.apply(this, Yocto.makeArray(arguments));
+    self.unbind(type, callback);
+  });
+};
+
+Yocto.prototype.off =
+Yocto.prototype.unbind = function(type, callback) {
   var index = arguments.length ? callback['__yid__'] : false;
-  if (isNull(index)) return this;
-  forEach.call(this, function(element) {
-    var id = elementId(element), proxies;
-    if ( ! (id in eventCallbacks) ||  ! (type in eventCallbacks[id])) return;
-    proxies = isNum(index) ? [eventCallbacks[id][type][index]] : eventCallbacks[id][type];
+  if (Yocto.isNull(index)) return this;
+  return this.forEach(function(element) {
+    var id = Yocto._elementId(element), proxies;
+    if ( ! (id in Yocto._eventCallbacks) ||  ! (type in Yocto._eventCallbacks[id])) return;
+    proxies = Yocto.isNumber(index) ? [Yocto._eventCallbacks[id][type][index]] : Yocto._eventCallbacks[id][type];
     proxies.forEach(function(proxy) {
       element.removeEventListener(type, proxy);
-      delete eventCallbacks[id][type][index];
+      delete Yocto._eventCallbacks[id][type][index];
     });
   });
 };
 
-fn.trigger = function(event, params) {
-  event = isObj(event) ? event : $.Event(event, params);
-  forEach.call(this, function(element) {
+Yocto.prototype.trigger = function(event, params) {
+  event = Yocto.isObject(event) ? event : Yocto.Event(event, params);
+  this.forEach(function(element) {
     element.dispatchEvent(event);
-  }); return this;
+  });
 };
 
-function eventTypeParameters(name, data) {
-  
-  switch (name) {
-    case 'MouseEvent': return merge({
-      'bubbles': true,
-      'cancelable': true,
-      'view': window,
-      'detail': 0,
-      'screenX': 0, 'screenY': 0,
-      'clickX': 0, 'clickY': 0,
-      'ctrlKey':  false, 'altKey': false, 'shiftKey': false, 'metaKey': false,
-      'button': 0,
-      'relatedTarget': null
-    }, data);
-    case 'KeyboardEvent': return merge({
-      'bubbles': true,
-      'cancelable': true,
-      'view': window,
-      'char': null,
-      'key': null,
-      'location': 0,
-      'modifiersList': null,
-      'repeat': false,
-      'locale': null
-    }, data);
-    case 'FocusEvent': return merge({
-      'bubbles': true,
-      'cancelable': true,
-      'deatil': 0
-    }, data);
-    case 'CustomEvent': return merge({
-      'bubbles': true,
-      'cancelable': true,
-      'detail': null
-    }, data);
-  }
-}
-
-$.eventTypes = {
-  'MouseEvent': /^((dbl)?click$|mouse).*/i,
-  'KeyboardEvent': /^(textInput$|key).*/i,
-  'FocusEvent': /^(blur$|focus).*/i,
-  'CustomEvent': /.+/
+Yocto.prototype.remove = function() {
+  return this.off() && this.detach();
 }
 
 /**
  * @constructor
  * @param {string} type
- * @return {$.Event}
+ * @return {Yocto.Event}
  */
-$.Event = function(type, data) {
-  var event;
-  for (var name in $.eventTypes) { if ( ! $.eventTypes.hasOwnProperty(name)) continue;
-    if ($.eventTypes[name].test(type)) {
+Yocto.Event = function(type, data) {
+  var event, types = {
+    'MouseEvent': /^((?:dbl)?click$|mouse).*/i,
+    'KeyboardEvent': /^(textInput$|key).*/i,
+    'FocusEvent': /^(blur$|focus).*/i,
+    'Event': /.+/
+  }, match;
+  Yocto.each(types, function(name, regex) {
+    if (regex.test(type)) {
+      var params = Yocto.extend({
+        'bubbles': true,
+        'cancalable': true
+      }, data);
+      
+      if (name == 'MouseEvent') params = Yocto.extend({
+        'view': document.defaultView,
+        'detail': 0,
+        'screenX': 0, 'screenY': 0,
+        'clickX': 0, 'clickY': 0,
+        'ctrlKey':  false, 'altKey': false, 'shiftKey': false, 'metaKey': false,
+        'button': 0,
+        'relatedTarget': null
+      }, params);
+      else if (name == 'KeyboardEvent') params = Yocto.extend({
+        'view': document.defaultView,
+        'char': null,
+        'key': null,
+        'location': 0,
+        'modifiersList': null,
+        'repeat': false,
+        'locale': null,
+        'relatedTarget': null
+      }, params);
+      else if (name.match(/(Focus)?Event/)) params = Yocto.extend({
+        'deatil': (name == 'Event' ? null : 0)
+      }, params);
+      
       event = document.createEvent(name);
-      event['init' + name].apply(event, [type].concat(values(eventTypeParameters(name, data))));
-      break;
+      event['init' + name].apply(event, [type].concat(Yocto.values(params)));
+      event['data'] = data;
+      
+      return false;
     }
-  }
+  });
+  
   return event;
 };

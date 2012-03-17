@@ -1,0 +1,11 @@
+{
+  "name":"yocto",
+  "description":"A jQuery-api-compliant lightweight modern javascript library designed for linking with closure compiler.",
+  "keywords":["lightwieght", "fast", "jquery", "library"],
+  "homepage":"http://ollym.github.com/yocto/",
+  "version":"0.0.1",
+  "author":"Oliver Morgan <ollym@me.com>",
+  "repository":{ "type": "git", "url": "git://github.com/ollym/yocto.git" },
+  "main":"./lib/yocto.js",
+  "dependencies": ["glob"]
+}
